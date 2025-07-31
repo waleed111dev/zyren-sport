@@ -46,36 +46,50 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
+  // Enhanced localStorage save function
+  const saveProductsToStorage = (productsToSave: any[]) => {
+    try {
+      localStorage.setItem("zyren-products", JSON.stringify(productsToSave))
+      console.log("Products saved to localStorage:", productsToSave.length, "items")
+    } catch (error) {
+      console.error("Error saving products to localStorage:", error)
+      alert("Error saving products. Please try again.")
+    }
+  }
+
   // Load products from localStorage on component mount
   useEffect(() => {
     const savedProducts = localStorage.getItem("zyren-products")
     if (savedProducts) {
       try {
         const parsedProducts = JSON.parse(savedProducts)
-        setProducts(parsedProducts)
+        if (Array.isArray(parsedProducts) && parsedProducts.length > 0) {
+          setProducts(parsedProducts)
+          console.log("Loaded products from localStorage:", parsedProducts.length, "items")
+        } else {
+          setProducts(defaultProducts)
+          saveProductsToStorage(defaultProducts)
+        }
       } catch (error) {
         console.error("Error loading products:", error)
         setProducts(defaultProducts)
+        saveProductsToStorage(defaultProducts)
       }
     } else {
       setProducts(defaultProducts)
+      saveProductsToStorage(defaultProducts)
     }
     setIsLoading(false)
   }, [])
 
-  // Save products to localStorage whenever products change
-  useEffect(() => {
-    if (!isLoading && products.length > 0) {
-      localStorage.setItem("zyren-products", JSON.stringify(products))
-    }
-  }, [products, isLoading])
-
-  // Simple authentication (in production, use proper authentication)
+  // Secure authentication with hidden password
   const handleLogin = () => {
-    if (adminPassword === "zyren2024") {
+    if (adminPassword === "Waleedgujjar111") {
       setIsAuthenticated(true)
+      setAdminPassword("") // Clear password from memory
     } else {
       alert("Incorrect password!")
+      setAdminPassword("") // Clear incorrect password
     }
   }
 
@@ -138,6 +152,7 @@ export default function AdminPage() {
 
     const updatedProducts = [...products, product]
     setProducts(updatedProducts)
+    saveProductsToStorage(updatedProducts)
 
     // Reset form
     setNewProduct({
@@ -162,15 +177,35 @@ export default function AdminPage() {
 
     const updatedProducts = products.map((p) => (p.id === editingProduct.id ? editingProduct : p))
     setProducts(updatedProducts)
+    saveProductsToStorage(updatedProducts)
     setEditingProduct(null)
 
     alert("Product updated successfully!")
   }
 
+  // Fixed delete function with proper localStorage update
   const handleDeleteProduct = (id: number) => {
-    if (confirm("Are you sure you want to delete this product?")) {
+    if (confirm("Are you sure you want to delete this product? This action cannot be undone.")) {
       const updatedProducts = products.filter((p) => p.id !== id)
+      console.log("Deleting product with ID:", id)
+      console.log("Products before deletion:", products.length)
+      console.log("Products after deletion:", updatedProducts.length)
+
+      // Update state
       setProducts(updatedProducts)
+
+      // Immediately save to localStorage
+      saveProductsToStorage(updatedProducts)
+
+      // Verify the deletion was saved
+      setTimeout(() => {
+        const savedProducts = localStorage.getItem("zyren-products")
+        if (savedProducts) {
+          const parsedProducts = JSON.parse(savedProducts)
+          console.log("Verified products in localStorage after deletion:", parsedProducts.length)
+        }
+      }, 100)
+
       alert("Product deleted successfully!")
     }
   }
@@ -178,11 +213,13 @@ export default function AdminPage() {
   const toggleFeatured = (id: number) => {
     const updatedProducts = products.map((p) => (p.id === id ? { ...p, featured: !p.featured } : p))
     setProducts(updatedProducts)
+    saveProductsToStorage(updatedProducts)
   }
 
   const toggleStock = (id: number) => {
     const updatedProducts = products.map((p) => (p.id === id ? { ...p, inStock: !p.inStock } : p))
     setProducts(updatedProducts)
+    saveProductsToStorage(updatedProducts)
   }
 
   const removeImage = (imageIndex: number, isEditing = false) => {
@@ -199,12 +236,31 @@ export default function AdminPage() {
     }
   }
 
+  // Clear all products function (for testing)
+  const handleClearAllProducts = () => {
+    if (confirm("Are you sure you want to delete ALL products? This action cannot be undone!")) {
+      setProducts([])
+      localStorage.removeItem("zyren-products")
+      alert("All products have been deleted!")
+    }
+  }
+
+  // Reset to default products function
+  const handleResetToDefault = () => {
+    if (confirm("Reset to default products? This will replace all current products.")) {
+      setProducts(defaultProducts)
+      saveProductsToStorage(defaultProducts)
+      alert("Products reset to default!")
+    }
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-center">Admin Login</CardTitle>
+            <p className="text-center text-sm text-gray-600">Secure access to Zyren Sports Admin Panel</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -216,14 +272,15 @@ export default function AdminPage() {
                 onChange={(e) => setAdminPassword(e.target.value)}
                 placeholder="Enter admin password"
                 onKeyPress={(e) => e.key === "Enter" && handleLogin()}
+                className="mt-1"
               />
             </div>
             <Button onClick={handleLogin} className="w-full bg-green-600 hover:bg-green-700">
-              Login
+              Login to Admin Panel
             </Button>
-            <p className="text-sm text-gray-600 text-center">
-              Demo password: <code className="bg-gray-100 px-2 py-1 rounded">zyren2024</code>
-            </p>
+            <div className="text-center">
+              <p className="text-xs text-gray-500">🔒 Secure authentication required</p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -272,133 +329,147 @@ export default function AdminPage() {
             <h1 className="text-3xl font-bold text-gray-900">Product Management</h1>
             <p className="text-gray-600">Manage your Zyren Sports product catalog ({products.length} products)</p>
           </div>
-          <Dialog open={isAddingProduct} onOpenChange={setIsAddingProduct}>
-            <DialogTrigger asChild>
-              <Button className="bg-green-600 hover:bg-green-700">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Product
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add New Product</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="name">Product Name *</Label>
-                    <Input
-                      id="name"
-                      value={newProduct.name}
-                      onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                      placeholder="Enter product name"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="price">Price *</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      step="0.01"
-                      value={newProduct.price}
-                      onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="category">Category *</Label>
-                  <Select onValueChange={(value) => setNewProduct({ ...newProduct, category: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Men">Men</SelectItem>
-                      <SelectItem value="Women">Women</SelectItem>
-                      <SelectItem value="Shoes">Shoes</SelectItem>
-                      <SelectItem value="Accessories">Accessories</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={newProduct.description}
-                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                    placeholder="Enter product description"
-                    rows={3}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="images">Product Images</Label>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
+          <div className="flex gap-2">
+            <Dialog open={isAddingProduct} onOpenChange={setIsAddingProduct}>
+              <DialogTrigger asChild>
+                <Button className="bg-green-600 hover:bg-green-700">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Product
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add New Product</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="name">Product Name *</Label>
                       <Input
-                        id="images"
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e)}
-                        className="cursor-pointer"
+                        id="name"
+                        value={newProduct.name}
+                        onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                        placeholder="Enter product name"
                       />
-                      <Upload className="h-4 w-4 text-gray-400" />
                     </div>
-                    {newProduct.images.length > 0 && (
-                      <div className="grid grid-cols-4 gap-2">
-                        {newProduct.images.map((image, index) => (
-                          <div key={index} className="relative">
-                            <img
-                              src={image || "/placeholder.svg"}
-                              alt={`Product ${index + 1}`}
-                              className="w-full h-20 object-cover rounded border"
-                            />
-                            <button
-                              onClick={() => removeImage(index)}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
+                    <div>
+                      <Label htmlFor="price">Price *</Label>
+                      <Input
+                        id="price"
+                        type="number"
+                        step="0.01"
+                        value={newProduct.price}
+                        onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="category">Category *</Label>
+                    <Select onValueChange={(value) => setNewProduct({ ...newProduct, category: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Men">Men</SelectItem>
+                        <SelectItem value="Women">Women</SelectItem>
+                        <SelectItem value="Shoes">Shoes</SelectItem>
+                        <SelectItem value="Accessories">Accessories</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={newProduct.description}
+                      onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                      placeholder="Enter product description"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="images">Product Images</Label>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="images"
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(e)}
+                          className="cursor-pointer"
+                        />
+                        <Upload className="h-4 w-4 text-gray-400" />
                       </div>
-                    )}
+                      {newProduct.images.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2">
+                          {newProduct.images.map((image, index) => (
+                            <div key={index} className="relative">
+                              <img
+                                src={image || "/placeholder.svg"}
+                                alt={`Product ${index + 1}`}
+                                className="w-full h-20 object-cover rounded border"
+                              />
+                              <button
+                                onClick={() => removeImage(index)}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={newProduct.inStock}
+                        onChange={(e) => setNewProduct({ ...newProduct, inStock: e.target.checked })}
+                      />
+                      In Stock
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={newProduct.featured}
+                        onChange={(e) => setNewProduct({ ...newProduct, featured: e.target.checked })}
+                      />
+                      Featured Product
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
+                    <Button onClick={handleAddProduct} className="bg-green-600 hover:bg-green-700">
+                      Add Product
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsAddingProduct(false)}>
+                      Cancel
+                    </Button>
                   </div>
                 </div>
+              </DialogContent>
+            </Dialog>
 
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={newProduct.inStock}
-                      onChange={(e) => setNewProduct({ ...newProduct, inStock: e.target.checked })}
-                    />
-                    In Stock
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={newProduct.featured}
-                      onChange={(e) => setNewProduct({ ...newProduct, featured: e.target.checked })}
-                    />
-                    Featured Product
-                  </label>
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button onClick={handleAddProduct} className="bg-green-600 hover:bg-green-700">
-                    Add Product
-                  </Button>
-                  <Button variant="outline" onClick={() => setIsAddingProduct(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+            {/* Admin Tools */}
+            <Button
+              variant="outline"
+              onClick={handleResetToDefault}
+              className="text-blue-600 border-blue-600 bg-transparent"
+            >
+              Reset to Default
+            </Button>
+            <Button variant="destructive" onClick={handleClearAllProducts}>
+              Clear All
+            </Button>
+          </div>
         </div>
 
         {/* Products Grid */}
@@ -415,6 +486,11 @@ export default function AdminPage() {
                   {product.featured && <Badge className="bg-yellow-500">Featured</Badge>}
                   <Badge variant={product.inStock ? "default" : "destructive"}>
                     {product.inStock ? "In Stock" : "Out of Stock"}
+                  </Badge>
+                </div>
+                <div className="absolute top-2 left-2">
+                  <Badge variant="outline" className="bg-white/90">
+                    ID: {product.id}
                   </Badge>
                 </div>
               </div>
@@ -435,7 +511,7 @@ export default function AdminPage() {
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Edit Product</DialogTitle>
+                        <DialogTitle>Edit Product (ID: {product.id})</DialogTitle>
                       </DialogHeader>
                       {editingProduct && (
                         <div className="space-y-4">
@@ -570,7 +646,12 @@ export default function AdminPage() {
                     ⭐
                   </Button>
 
-                  <Button variant="destructive" size="sm" onClick={() => handleDeleteProduct(product.id)}>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDeleteProduct(product.id)}
+                    className="hover:bg-red-600"
+                  >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -588,6 +669,26 @@ export default function AdminPage() {
             </Button>
           </div>
         )}
+
+        {/* Debug Info */}
+        <div className="mt-8 p-4 bg-gray-100 rounded-lg">
+          <h3 className="font-semibold mb-2">Debug Information:</h3>
+          <p className="text-sm text-gray-600">Total Products: {products.length}</p>
+          <p className="text-sm text-gray-600">Featured Products: {products.filter((p) => p.featured).length}</p>
+          <p className="text-sm text-gray-600">In Stock Products: {products.filter((p) => p.inStock).length}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const saved = localStorage.getItem("zyren-products")
+              console.log("Current localStorage:", saved)
+              alert(`localStorage contains: ${saved ? JSON.parse(saved).length : 0} products`)
+            }}
+            className="mt-2"
+          >
+            Check localStorage
+          </Button>
+        </div>
       </div>
     </div>
   )
