@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Dynamic product URLs will be generated here -->
+  <url>
+    <loc>https://zyrensports.com/products/pro-runner-sneakers</loc>
+    <lastmod>2024-01-25T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://zyrensports.com/products/performance-track-jacket</loc>
+    <lastmod>2024-01-25T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+</urlset>

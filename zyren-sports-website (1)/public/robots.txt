@@ -1,0 +1,36 @@
+# Robots.txt for Zyren Sports - Optimized for Google
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /test-whatsapp/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /checkout/
+Disallow: /private/
+Disallow: /temp/
+
+# Allow specific important crawlers
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+# Crawl delay for better server performance
+Crawl-delay: 1
+
+# Sitemap locations
+Sitemap: https://zyrensports.com/sitemap.xml
+Sitemap: https://zyrensports.com/product-sitemap.xml
+
+# Host directive
+Host: https://zyrensports.com
