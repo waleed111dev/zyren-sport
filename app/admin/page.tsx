@@ -181,6 +181,7 @@ export default function AdminPage() {
     }
   }
 
+  // Enhanced delete function with better error handling
   const handleDeleteProduct = async (id: number) => {
     const product = products.find((p) => p.id === id)
     if (!product) {
@@ -191,18 +192,42 @@ export default function AdminPage() {
     if (confirm(`Are you sure you want to delete "${product.name}"? This action cannot be undone.`)) {
       setIsProcessing(true)
       try {
+        console.log(`🗑️ Admin: Attempting to delete product ${id}: ${product.name}`)
+
         const success = await StorageManager.deleteProduct(id)
 
         if (success) {
-          const updatedProducts = await StorageManager.loadProducts()
-          setProducts(updatedProducts)
-          alert(`Product "${product.name}" deleted successfully!`)
+          console.log(`✅ Admin: StorageManager reported successful deletion for ID ${id}`)
+          // Optimistically update UI immediately
+          setProducts((prevProducts) => prevProducts.filter((p) => p.id !== id))
+          alert(`✅ Product "${product.name}" deleted successfully!`)
+
+          // Optional: Force refresh for background consistency check, but don't block UI
+          // This will also update storageInfo
+          StorageManager.forceRefresh()
+            .then((refreshedProducts) => {
+              console.log(
+                `🔄 Admin: Background refresh completed. Current products in storage:`,
+                refreshedProducts.map((p) => p.id),
+              )
+              const stillExistsInStorage = refreshedProducts.some((p) => p.id === id)
+              if (stillExistsInStorage) {
+                console.warn(
+                  `⚠️ Admin: Product ${id} was found in storage after background refresh. Manual intervention might be needed.`,
+                )
+              }
+              setStorageInfo(StorageManager.getStorageInfo()) // Update storage info after refresh
+            })
+            .catch((error) => {
+              console.error("❌ Admin: Error during background refresh after deletion:", error)
+            })
         } else {
-          alert("Failed to delete product. Please try again.")
+          console.error(`❌ Admin: StorageManager reported deletion failure for ID ${id}`)
+          alert("❌ Failed to delete product. Please try again.")
         }
       } catch (error) {
-        console.error("Error deleting product:", error)
-        alert("Error deleting product. Please try again.")
+        console.error("❌ Admin: Error during deletion process:", error)
+        alert("❌ Error deleting product. Please refresh the page and try again.")
       } finally {
         setIsProcessing(false)
       }
@@ -590,6 +615,16 @@ export default function AdminPage() {
             <Button variant="outline" onClick={handleForceRefresh}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await StorageManager.debugStorage()
+                alert("Check console for storage debug information")
+              }}
+            >
+              🔍 Debug Storage
             </Button>
 
             <Button

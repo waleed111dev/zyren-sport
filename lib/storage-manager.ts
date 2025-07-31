@@ -257,39 +257,135 @@ export class StorageManager {
     }
   }
 
-  // Delete product with verification
+  // Fixed delete product with proper verification
   static async deleteProduct(id: number): Promise<boolean> {
     try {
-      const products = await this.loadProducts()
-      const initialCount = products.length
+      console.log(`🗑️ Starting deletion process for product ID: ${id}`)
 
-      const filteredProducts = products.filter((p) => p.id !== id)
+      // Step 1: Load current products and verify product exists
+      const currentProducts = await this.loadProducts()
+      const productToDelete = currentProducts.find((p) => p.id === id)
 
-      if (filteredProducts.length === initialCount) {
-        console.error(`Product with ID ${id} not found for deletion`)
+      if (!productToDelete) {
+        console.error(`❌ Product with ID ${id} not found`)
         return false
       }
 
-      const success = await this.saveProducts(filteredProducts)
+      console.log(`📦 Found product to delete: "${productToDelete.name}"`)
+      console.log(`📊 Current products count: ${currentProducts.length}`)
 
-      if (success) {
-        console.log(`Successfully deleted product ${id}. Products: ${initialCount} -> ${filteredProducts.length}`)
+      // Step 2: Create filtered array WITHOUT the product to delete
+      const filteredProducts = currentProducts.filter((p) => p.id !== id)
+      console.log(`🔄 Filtered products count: ${filteredProducts.length}`)
 
-        // Verify deletion
-        const verificationProducts = await this.loadProducts()
-        const stillExists = verificationProducts.some((p) => p.id === id)
-
-        if (stillExists) {
-          console.error(`Product ${id} still exists after deletion attempt`)
-          return false
-        }
-
-        return true
+      // Step 3: Verify the product was actually filtered out
+      const stillInFiltered = filteredProducts.some((p) => p.id === id)
+      if (stillInFiltered) {
+        console.error(`❌ Product ${id} still exists in filtered array`)
+        return false
       }
 
-      return false
+      // Step 4: Clear all storage first
+      try {
+        localStorage.removeItem(this.STORAGE_KEY)
+        localStorage.removeItem(this.BACKUP_KEY)
+        console.log(`🧹 Cleared existing storage`)
+      } catch (error) {
+        console.warn("Warning: Could not clear storage:", error)
+      }
+
+      // Step 5: Save the filtered products with multiple attempts
+      let saveSuccess = false
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`💾 Save attempt ${attempt}/3`)
+
+          // Create backup of current data
+          const currentData = localStorage.getItem(this.STORAGE_KEY)
+          if (currentData) {
+            localStorage.setItem(this.BACKUP_KEY, currentData)
+          }
+
+          // Save filtered products
+          const dataToSave = JSON.stringify(filteredProducts)
+          localStorage.setItem(this.STORAGE_KEY, dataToSave)
+
+          // Immediate verification
+          const savedData = localStorage.getItem(this.STORAGE_KEY)
+          if (savedData) {
+            const parsedData = JSON.parse(savedData)
+            const productStillExists = parsedData.some((p: any) => p.id === id)
+
+            if (!productStillExists && parsedData.length === filteredProducts.length) {
+              console.log(`✅ Save attempt ${attempt} successful`)
+              saveSuccess = true
+              break
+            } else {
+              console.warn(`⚠️ Save attempt ${attempt} failed verification`)
+            }
+          }
+
+          // Wait before next attempt
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 100))
+          }
+        } catch (error) {
+          console.error(`❌ Save attempt ${attempt} failed:`, error)
+        }
+      }
+
+      if (!saveSuccess) {
+        console.error(`❌ All save attempts failed for product ${id}`)
+        return false
+      }
+
+      // Step 6: Update cache immediately
+      this.cache = [...filteredProducts]
+      console.log(`🔄 Cache updated, new count: ${this.cache.length}`)
+
+      // Step 7: Final verification with a slightly longer delay
+      await new Promise((resolve) => setTimeout(resolve, 300)) // Increased delay for final check
+
+      const finalVerification = localStorage.getItem(this.STORAGE_KEY)
+      if (finalVerification) {
+        const finalProducts = JSON.parse(finalVerification)
+        const finalCheck = finalProducts.some((p: any) => p.id === id)
+
+        if (finalCheck) {
+          console.error(`❌ CRITICAL: Product ${id} still exists after all attempts`)
+
+          // Emergency cleanup - force remove from storage
+          const emergencyFiltered = finalProducts.filter((p: any) => p.id !== id)
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(emergencyFiltered))
+          this.cache = emergencyFiltered
+
+          // Final emergency check
+          const emergencyCheck = localStorage.getItem(this.STORAGE_KEY)
+          if (emergencyCheck) {
+            const emergencyProducts = JSON.parse(emergencyCheck)
+            const stillThere = emergencyProducts.some((p: any) => p.id === id)
+            if (stillThere) {
+              console.error(`❌ EMERGENCY CLEANUP FAILED for product ${id}`)
+              return false
+            }
+          }
+
+          console.log(`🚨 Emergency cleanup successful for product ${id}`)
+        }
+      }
+
+      // Step 8: Set sync timestamp
+      localStorage.setItem(this.SYNC_KEY, Date.now().toString())
+
+      console.log(`✅ Product ${id} ("${productToDelete.name}") successfully deleted`)
+      console.log(`📊 Final count: ${filteredProducts.length} products`)
+
+      // Add a debug call here to show the final state of storage
+      await this.debugStorage()
+
+      return true
     } catch (error) {
-      console.error("Failed to delete product:", error)
+      console.error(`❌ Critical error during deletion of product ${id}:`, error)
       return false
     }
   }
@@ -311,7 +407,7 @@ export class StorageManager {
       localStorage.removeItem(this.STORAGE_KEY)
       localStorage.removeItem(this.BACKUP_KEY)
       localStorage.removeItem(this.SYNC_KEY)
-      this.cache = null
+      this.cache = []
       this.isInitialized = false
       return true
     } catch (error) {
@@ -384,6 +480,36 @@ export class StorageManager {
     } catch (error) {
       console.error("Failed to import data:", error)
       return false
+    }
+  }
+
+  // Debug method to check storage consistency
+  static async debugStorage(): Promise<void> {
+    try {
+      console.log("🔍 STORAGE DEBUG REPORT:")
+
+      const storageData = localStorage.getItem(this.STORAGE_KEY)
+      const backupData = localStorage.getItem(this.BACKUP_KEY)
+      const syncTime = localStorage.getItem(this.SYNC_KEY)
+
+      console.log("📦 Storage data exists:", !!storageData)
+      console.log("💾 Backup data exists:", !!backupData)
+      console.log("🕐 Last sync:", syncTime ? new Date(Number(syncTime)).toLocaleString() : "Never")
+
+      if (storageData) {
+        const parsed = JSON.parse(storageData)
+        console.log("📊 Storage products count:", parsed.length)
+        console.log(
+          "🆔 Storage product IDs:",
+          parsed.map((p: any) => p.id),
+        )
+      }
+
+      console.log("🧠 Cache exists:", !!this.cache)
+      console.log("📊 Cache products count:", this.cache?.length || 0)
+      console.log("🆔 Cache product IDs:", this.cache?.map((p: any) => p.id) || [])
+    } catch (error) {
+      console.error("❌ Debug storage error:", error)
     }
   }
 }
