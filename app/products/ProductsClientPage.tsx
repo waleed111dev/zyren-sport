@@ -6,28 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
+import { StorageManager } from "@/lib/storage-manager"
 
 const categories = ["All", "Men", "Women", "Shoes", "Accessories"]
-
-// Default products if none are saved
-const defaultProducts = [
-  {
-    id: 1,
-    name: "Pro Runner Sneakers",
-    price: 129.99,
-    image: "/placeholder.svg?height=300&width=300",
-    category: "Shoes",
-    description: "High-performance running shoes with advanced cushioning",
-  },
-  {
-    id: 2,
-    name: "Performance Track Jacket",
-    price: 89.99,
-    image: "/placeholder.svg?height=300&width=300",
-    category: "Men",
-    description: "Lightweight track jacket for optimal performance",
-  },
-]
 
 export default function ProductsClientPage() {
   const [products, setProducts] = useState<any[]>([])
@@ -35,23 +16,24 @@ export default function ProductsClientPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load products from localStorage
+  // Load products using enhanced storage manager
   useEffect(() => {
-    const savedProducts = localStorage.getItem("zyren-products")
-    if (savedProducts) {
+    const loadProducts = async () => {
       try {
-        const parsedProducts = JSON.parse(savedProducts)
+        await StorageManager.initialize()
+        const allProducts = await StorageManager.loadProducts()
         // Only show products that are in stock
-        const availableProducts = parsedProducts.filter((product: any) => product.inStock)
+        const availableProducts = allProducts.filter((product: any) => product.inStock)
         setProducts(availableProducts)
       } catch (error) {
         console.error("Error loading products:", error)
-        setProducts(defaultProducts)
+        setProducts([])
+      } finally {
+        setIsLoading(false)
       }
-    } else {
-      setProducts(defaultProducts)
     }
-    setIsLoading(false)
+
+    loadProducts()
   }, [])
 
   const filteredProducts = products.filter((product) => {
@@ -141,7 +123,7 @@ export default function ProductsClientPage() {
                 <Link href={`/products/${product.id}`}>
                   <div className="aspect-square overflow-hidden">
                     <img
-                      src={product.images?.[0] || product.image || "/placeholder.svg"}
+                      src={product.images?.[0] || "/placeholder.svg"}
                       alt={product.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />

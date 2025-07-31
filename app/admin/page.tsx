@@ -12,84 +12,55 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Edit, Trash2, Eye, EyeOff, Upload } from "lucide-react"
-
-// Default products that will be loaded if no saved products exist
-const defaultProducts = [
-  {
-    id: 1,
-    name: "Pro Runner Sneakers",
-    price: 129.99,
-    images: ["/placeholder.svg?height=300&width=300"],
-    category: "Shoes",
-    description: "High-performance running shoes with advanced cushioning",
-    inStock: true,
-    featured: true,
-  },
-  {
-    id: 2,
-    name: "Performance Track Jacket",
-    price: 89.99,
-    images: ["/placeholder.svg?height=300&width=300"],
-    category: "Men",
-    description: "Lightweight track jacket for optimal performance",
-    inStock: true,
-    featured: true,
-  },
-]
+import { Plus, Edit, Trash2, Eye, EyeOff, Upload, Download, RefreshCw, AlertCircle } from "lucide-react"
+import { StorageManager, type Product } from "@/lib/storage-manager"
 
 export default function AdminPage() {
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [isAddingProduct, setIsAddingProduct] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<any>(null)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [adminPassword, setAdminPassword] = useState("")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [storageInfo, setStorageInfo] = useState<any>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
 
-  // Enhanced localStorage save function
-  const saveProductsToStorage = (productsToSave: any[]) => {
-    try {
-      localStorage.setItem("zyren-products", JSON.stringify(productsToSave))
-      console.log("Products saved to localStorage:", productsToSave.length, "items")
-    } catch (error) {
-      console.error("Error saving products to localStorage:", error)
-      alert("Error saving products. Please try again.")
-    }
-  }
-
-  // Load products from localStorage on component mount
+  // Load products using enhanced storage manager
   useEffect(() => {
-    const savedProducts = localStorage.getItem("zyren-products")
-    if (savedProducts) {
+    const initializeData = async () => {
       try {
-        const parsedProducts = JSON.parse(savedProducts)
-        if (Array.isArray(parsedProducts) && parsedProducts.length > 0) {
-          setProducts(parsedProducts)
-          console.log("Loaded products from localStorage:", parsedProducts.length, "items")
-        } else {
-          setProducts(defaultProducts)
-          saveProductsToStorage(defaultProducts)
-        }
+        setIsLoading(true)
+        await StorageManager.initialize()
+        const loadedProducts = await StorageManager.loadProducts()
+        setProducts(loadedProducts)
+        setStorageInfo(StorageManager.getStorageInfo())
+        console.log(`Loaded ${loadedProducts.length} products successfully`)
       } catch (error) {
-        console.error("Error loading products:", error)
-        setProducts(defaultProducts)
-        saveProductsToStorage(defaultProducts)
+        console.error("Failed to initialize data:", error)
+        alert("Error loading products. Please refresh the page.")
+      } finally {
+        setIsLoading(false)
       }
-    } else {
-      setProducts(defaultProducts)
-      saveProductsToStorage(defaultProducts)
     }
-    setIsLoading(false)
+
+    initializeData()
   }, [])
 
-  // Secure authentication with hidden password
+  // Update storage info when products change
+  useEffect(() => {
+    if (!isLoading) {
+      setStorageInfo(StorageManager.getStorageInfo())
+    }
+  }, [products, isLoading])
+
+  // Secure authentication
   const handleLogin = () => {
     if (adminPassword === "Waleedgujjar111") {
       setIsAuthenticated(true)
-      setAdminPassword("") // Clear password from memory
+      setAdminPassword("")
     } else {
       alert("Incorrect password!")
-      setAdminPassword("") // Clear incorrect password
+      setAdminPassword("")
     }
   }
 
@@ -116,6 +87,7 @@ export default function AdminPage() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
     const files = e.target.files
     if (files) {
+      setIsProcessing(true)
       try {
         const imagePromises = Array.from(files).map((file) => fileToBase64(file))
         const base64Images = await Promise.all(imagePromises)
@@ -134,99 +106,136 @@ export default function AdminPage() {
       } catch (error) {
         console.error("Error uploading images:", error)
         alert("Error uploading images. Please try again.")
+      } finally {
+        setIsProcessing(false)
       }
     }
   }
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     if (!newProduct.name || !newProduct.price || !newProduct.category) {
       alert("Please fill in all required fields")
       return
     }
 
-    const product = {
-      id: Date.now(),
-      ...newProduct,
-      price: Number.parseFloat(newProduct.price),
+    setIsProcessing(true)
+    try {
+      const productData = {
+        ...newProduct,
+        price: Number.parseFloat(newProduct.price),
+      }
+
+      const addedProduct = await StorageManager.addProduct(productData)
+
+      if (addedProduct) {
+        const updatedProducts = await StorageManager.loadProducts()
+        setProducts(updatedProducts)
+
+        // Reset form
+        setNewProduct({
+          name: "",
+          price: "",
+          category: "",
+          description: "",
+          images: [],
+          inStock: true,
+          featured: false,
+        })
+        setIsAddingProduct(false)
+
+        alert(`Product "${addedProduct.name}" added successfully!`)
+      } else {
+        alert("Failed to add product. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error adding product:", error)
+      alert("Error adding product. Please try again.")
+    } finally {
+      setIsProcessing(false)
     }
-
-    const updatedProducts = [...products, product]
-    setProducts(updatedProducts)
-    saveProductsToStorage(updatedProducts)
-
-    // Reset form
-    setNewProduct({
-      name: "",
-      price: "",
-      category: "",
-      description: "",
-      images: [],
-      inStock: true,
-      featured: false,
-    })
-    setIsAddingProduct(false)
-
-    alert("Product added successfully!")
   }
 
-  const handleEditProduct = () => {
-    if (!editingProduct.name || !editingProduct.price || !editingProduct.category) {
+  const handleEditProduct = async () => {
+    if (!editingProduct || !editingProduct.name || !editingProduct.price || !editingProduct.category) {
       alert("Please fill in all required fields")
       return
     }
 
-    const updatedProducts = products.map((p) => (p.id === editingProduct.id ? editingProduct : p))
-    setProducts(updatedProducts)
-    saveProductsToStorage(updatedProducts)
-    setEditingProduct(null)
+    setIsProcessing(true)
+    try {
+      const success = await StorageManager.updateProduct(editingProduct.id, editingProduct)
 
-    alert("Product updated successfully!")
-  }
-
-  // Fixed delete function with proper localStorage update
-  const handleDeleteProduct = (id: number) => {
-    if (confirm("Are you sure you want to delete this product? This action cannot be undone.")) {
-      const updatedProducts = products.filter((p) => p.id !== id)
-      console.log("Deleting product with ID:", id)
-      console.log("Products before deletion:", products.length)
-      console.log("Products after deletion:", updatedProducts.length)
-
-      // Update state
-      setProducts(updatedProducts)
-
-      // Immediately save to localStorage
-      saveProductsToStorage(updatedProducts)
-
-      // Verify the deletion was saved
-      setTimeout(() => {
-        const savedProducts = localStorage.getItem("zyren-products")
-        if (savedProducts) {
-          const parsedProducts = JSON.parse(savedProducts)
-          console.log("Verified products in localStorage after deletion:", parsedProducts.length)
-        }
-      }, 100)
-
-      alert("Product deleted successfully!")
+      if (success) {
+        const updatedProducts = await StorageManager.loadProducts()
+        setProducts(updatedProducts)
+        setEditingProduct(null)
+        alert("Product updated successfully!")
+      } else {
+        alert("Failed to update product. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error updating product:", error)
+      alert("Error updating product. Please try again.")
+    } finally {
+      setIsProcessing(false)
     }
   }
 
-  const toggleFeatured = (id: number) => {
-    const updatedProducts = products.map((p) => (p.id === id ? { ...p, featured: !p.featured } : p))
-    setProducts(updatedProducts)
-    saveProductsToStorage(updatedProducts)
+  const handleDeleteProduct = async (id: number) => {
+    const product = products.find((p) => p.id === id)
+    if (!product) {
+      alert("Product not found!")
+      return
+    }
+
+    if (confirm(`Are you sure you want to delete "${product.name}"? This action cannot be undone.`)) {
+      setIsProcessing(true)
+      try {
+        const success = await StorageManager.deleteProduct(id)
+
+        if (success) {
+          const updatedProducts = await StorageManager.loadProducts()
+          setProducts(updatedProducts)
+          alert(`Product "${product.name}" deleted successfully!`)
+        } else {
+          alert("Failed to delete product. Please try again.")
+        }
+      } catch (error) {
+        console.error("Error deleting product:", error)
+        alert("Error deleting product. Please try again.")
+      } finally {
+        setIsProcessing(false)
+      }
+    }
   }
 
-  const toggleStock = (id: number) => {
-    const updatedProducts = products.map((p) => (p.id === id ? { ...p, inStock: !p.inStock } : p))
-    setProducts(updatedProducts)
-    saveProductsToStorage(updatedProducts)
+  const toggleFeatured = async (id: number) => {
+    const product = products.find((p) => p.id === id)
+    if (product) {
+      const success = await StorageManager.updateProduct(id, { featured: !product.featured })
+      if (success) {
+        const updatedProducts = await StorageManager.loadProducts()
+        setProducts(updatedProducts)
+      }
+    }
+  }
+
+  const toggleStock = async (id: number) => {
+    const product = products.find((p) => p.id === id)
+    if (product) {
+      const success = await StorageManager.updateProduct(id, { inStock: !product.inStock })
+      if (success) {
+        const updatedProducts = await StorageManager.loadProducts()
+        setProducts(updatedProducts)
+      }
+    }
   }
 
   const removeImage = (imageIndex: number, isEditing = false) => {
     if (isEditing && editingProduct) {
       setEditingProduct({
         ...editingProduct,
-        images: editingProduct.images.filter((_: any, i: number) => i !== imageIndex),
+        images: editingProduct.images.filter((_, i) => i !== imageIndex),
       })
     } else {
       setNewProduct({
@@ -236,21 +245,96 @@ export default function AdminPage() {
     }
   }
 
-  // Clear all products function (for testing)
-  const handleClearAllProducts = () => {
+  const handleClearAllProducts = async () => {
     if (confirm("Are you sure you want to delete ALL products? This action cannot be undone!")) {
-      setProducts([])
-      localStorage.removeItem("zyren-products")
-      alert("All products have been deleted!")
+      setIsProcessing(true)
+      try {
+        const success = await StorageManager.clearAll()
+        if (success) {
+          setProducts([])
+          alert("All products have been deleted!")
+        } else {
+          alert("Failed to clear products. Please try again.")
+        }
+      } catch (error) {
+        console.error("Error clearing products:", error)
+        alert("Error clearing products. Please try again.")
+      } finally {
+        setIsProcessing(false)
+      }
     }
   }
 
-  // Reset to default products function
-  const handleResetToDefault = () => {
+  const handleResetToDefault = async () => {
     if (confirm("Reset to default products? This will replace all current products.")) {
-      setProducts(defaultProducts)
-      saveProductsToStorage(defaultProducts)
-      alert("Products reset to default!")
+      setIsProcessing(true)
+      try {
+        await StorageManager.clearAll()
+        await StorageManager.initialize()
+        const defaultProducts = await StorageManager.loadProducts()
+        setProducts(defaultProducts)
+        alert("Products reset to default!")
+      } catch (error) {
+        console.error("Error resetting products:", error)
+        alert("Error resetting products. Please try again.")
+      } finally {
+        setIsProcessing(false)
+      }
+    }
+  }
+
+  const handleExportProducts = async () => {
+    try {
+      const exportData = await StorageManager.exportData()
+      const blob = new Blob([exportData], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `zyren-products-${new Date().toISOString().split("T")[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error("Error exporting products:", error)
+      alert("Error exporting products. Please try again.")
+    }
+  }
+
+  const handleImportProducts = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        try {
+          const jsonData = event.target?.result as string
+          const success = await StorageManager.importData(jsonData)
+          if (success) {
+            const importedProducts = await StorageManager.loadProducts()
+            setProducts(importedProducts)
+            alert("Products imported successfully!")
+          } else {
+            alert("Failed to import products. Please check the file format.")
+          }
+        } catch (error) {
+          alert("Error reading file. Please ensure it's a valid JSON file.")
+        }
+      }
+      reader.readAsText(file)
+    }
+  }
+
+  const handleForceRefresh = async () => {
+    setIsLoading(true)
+    try {
+      const refreshedProducts = await StorageManager.forceRefresh()
+      setProducts(refreshedProducts)
+      alert("Data refreshed successfully!")
+    } catch (error) {
+      console.error("Error refreshing data:", error)
+      alert("Error refreshing data. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -309,6 +393,12 @@ export default function AdminPage() {
                 ZYREN SPORTS
               </Link>
               <Badge variant="secondary">Admin Panel</Badge>
+              {isProcessing && (
+                <Badge variant="outline" className="animate-pulse">
+                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                  Processing...
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <Link href="/" className="text-gray-600 hover:text-green-600">
@@ -323,16 +413,23 @@ export default function AdminPage() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        {/* Header with Storage Info */}
+        <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Product Management</h1>
             <p className="text-gray-600">Manage your Zyren Sports product catalog ({products.length} products)</p>
+            {storageInfo && (
+              <div className="mt-2 flex gap-4 text-sm text-gray-500">
+                <span>Storage: {(storageInfo.storageSize / 1024).toFixed(1)}KB</span>
+                <span>Last Sync: {storageInfo.lastSync || "Never"}</span>
+                <span>Cache: {storageInfo.cacheStatus}</span>
+              </div>
+            )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Dialog open={isAddingProduct} onOpenChange={setIsAddingProduct}>
               <DialogTrigger asChild>
-                <Button className="bg-green-600 hover:bg-green-700">
+                <Button className="bg-green-600 hover:bg-green-700" disabled={isProcessing}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Product
                 </Button>
@@ -402,8 +499,10 @@ export default function AdminPage() {
                           accept="image/*"
                           onChange={(e) => handleImageUpload(e)}
                           className="cursor-pointer"
+                          disabled={isProcessing}
                         />
                         <Upload className="h-4 w-4 text-gray-400" />
+                        {isProcessing && <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />}
                       </div>
                       {newProduct.images.length > 0 && (
                         <div className="grid grid-cols-4 gap-2">
@@ -447,8 +546,19 @@ export default function AdminPage() {
                   </div>
 
                   <div className="flex gap-2 pt-4">
-                    <Button onClick={handleAddProduct} className="bg-green-600 hover:bg-green-700">
-                      Add Product
+                    <Button
+                      onClick={handleAddProduct}
+                      className="bg-green-600 hover:bg-green-700"
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Adding...
+                        </>
+                      ) : (
+                        "Add Product"
+                      )}
                     </Button>
                     <Button variant="outline" onClick={() => setIsAddingProduct(false)}>
                       Cancel
@@ -458,19 +568,58 @@ export default function AdminPage() {
               </DialogContent>
             </Dialog>
 
-            {/* Admin Tools */}
+            {/* Enhanced Admin Tools */}
+            <Button variant="outline" onClick={handleExportProducts}>
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+
+            <div className="relative">
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportProducts}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <Button variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Import
+              </Button>
+            </div>
+
+            <Button variant="outline" onClick={handleForceRefresh}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+
             <Button
               variant="outline"
               onClick={handleResetToDefault}
               className="text-blue-600 border-blue-600 bg-transparent"
             >
-              Reset to Default
+              Reset Default
             </Button>
-            <Button variant="destructive" onClick={handleClearAllProducts}>
+
+            <Button variant="destructive" onClick={handleClearAllProducts} disabled={isProcessing}>
               Clear All
             </Button>
           </div>
         </div>
+
+        {/* Storage Status Alert */}
+        {storageInfo && storageInfo.totalProducts !== products.length && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-yellow-600" />
+              <p className="text-yellow-800">
+                Storage sync issue detected. Displayed: {products.length}, Stored: {storageInfo.totalProducts}
+              </p>
+              <Button size="sm" variant="outline" onClick={handleForceRefresh}>
+                Fix Now
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -500,6 +649,7 @@ export default function AdminPage() {
                   <p className="text-sm text-gray-600">{product.category}</p>
                   <p className="text-green-600 font-bold text-xl">${product.price}</p>
                   <p className="text-sm text-gray-600 line-clamp-2">{product.description}</p>
+                  <p className="text-xs text-gray-400">Updated: {new Date(product.updatedAt).toLocaleDateString()}</p>
                 </div>
 
                 <div className="flex gap-2 mt-4">
@@ -576,8 +726,10 @@ export default function AdminPage() {
                                   accept="image/*"
                                   onChange={(e) => handleImageUpload(e, true)}
                                   className="cursor-pointer"
+                                  disabled={isProcessing}
                                 />
                                 <Upload className="h-4 w-4 text-gray-400" />
+                                {isProcessing && <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />}
                               </div>
                               {editingProduct.images.length > 0 && (
                                 <div className="grid grid-cols-4 gap-2">
@@ -621,8 +773,19 @@ export default function AdminPage() {
                           </div>
 
                           <div className="flex gap-2 pt-4">
-                            <Button onClick={handleEditProduct} className="bg-green-600 hover:bg-green-700">
-                              Save Changes
+                            <Button
+                              onClick={handleEditProduct}
+                              className="bg-green-600 hover:bg-green-700"
+                              disabled={isProcessing}
+                            >
+                              {isProcessing ? (
+                                <>
+                                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                "Save Changes"
+                              )}
                             </Button>
                             <Button variant="outline" onClick={() => setEditingProduct(null)}>
                               Cancel
@@ -651,6 +814,7 @@ export default function AdminPage() {
                     size="sm"
                     onClick={() => handleDeleteProduct(product.id)}
                     className="hover:bg-red-600"
+                    disabled={isProcessing}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -670,24 +834,32 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Debug Info */}
+        {/* Enhanced Debug Info */}
         <div className="mt-8 p-4 bg-gray-100 rounded-lg">
-          <h3 className="font-semibold mb-2">Debug Information:</h3>
-          <p className="text-sm text-gray-600">Total Products: {products.length}</p>
-          <p className="text-sm text-gray-600">Featured Products: {products.filter((p) => p.featured).length}</p>
-          <p className="text-sm text-gray-600">In Stock Products: {products.filter((p) => p.inStock).length}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const saved = localStorage.getItem("zyren-products")
-              console.log("Current localStorage:", saved)
-              alert(`localStorage contains: ${saved ? JSON.parse(saved).length : 0} products`)
-            }}
-            className="mt-2"
-          >
-            Check localStorage
-          </Button>
+          <h3 className="font-semibold mb-2">System Information:</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+            <div>Total Products: {products.length}</div>
+            <div>Featured Products: {products.filter((p) => p.featured).length}</div>
+            <div>In Stock Products: {products.filter((p) => p.inStock).length}</div>
+            <div>Storage Size: {storageInfo ? (storageInfo.storageSize / 1024).toFixed(1) + "KB" : "Unknown"}</div>
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const info = StorageManager.getStorageInfo()
+                alert(
+                  `Storage Info:\nProducts: ${info.totalProducts}\nSize: ${(info.storageSize / 1024).toFixed(1)}KB\nLast Sync: ${info.lastSync}\nCache: ${info.cacheStatus}`,
+                )
+              }}
+            >
+              Check Storage
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleForceRefresh}>
+              Force Refresh
+            </Button>
+          </div>
         </div>
       </div>
     </div>

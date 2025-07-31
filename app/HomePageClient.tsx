@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowRight, Star, Truck, Trophy, Target, Zap, Users } from "lucide-react"
+import { StorageManager } from "@/lib/storage-manager"
 
 export default function HomePageClient() {
   const [featuredProducts, setFeaturedProducts] = useState<any[]>([])
@@ -25,21 +26,26 @@ export default function HomePageClient() {
     }
   }, [])
 
-  // Load featured products from localStorage
+  // Load featured products using enhanced storage manager
   useEffect(() => {
-    const savedProducts = localStorage.getItem("zyren-products")
-    if (savedProducts) {
+    const loadFeaturedProducts = async () => {
       try {
-        const parsedProducts = JSON.parse(savedProducts)
-        const featured = parsedProducts.filter((product: any) => product.featured && product.inStock)
+        await StorageManager.initialize()
+        const products = await StorageManager.loadProducts()
+        const featured = products.filter((product: any) => product.featured && product.inStock)
         setFeaturedProducts(featured.slice(0, 6))
       } catch (error) {
-        console.error("Error loading products:", error)
+        console.error("Error loading featured products:", error)
         setFeaturedProducts([])
+      } finally {
+        setIsLoading(false)
       }
     }
-    setIsLoading(false)
-  }, [])
+
+    if (!showSplash) {
+      loadFeaturedProducts()
+    }
+  }, [showSplash])
 
   // Modern Athletic Splash Screen
   if (showSplash) {
